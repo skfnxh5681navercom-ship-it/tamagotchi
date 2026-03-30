@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Office</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #1a1b2e; color: #e0e0e0; height: 100vh; overflow: hidden; }
+
+/* Login Screen */
+#login-screen {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100vh; gap: 20px;
+}
+#login-screen h1 { font-size: 2.5em; color: #7c8dff; }
+#login-screen p { color: #888; font-size: 1.1em; }
+#login-screen input {
+  padding: 12px 20px; font-size: 1.1em; border-radius: 8px; border: 2px solid #3a3b5e;
+  background: #252640; color: #e0e0e0; width: 300px; outline: none;
+}
+#login-screen input:focus { border-color: #7c8dff; }
+#login-screen button {
+  padding: 12px 40px; font-size: 1.1em; border-radius: 8px; border: none;
+  background: #7c8dff; color: white; cursor: pointer; font-weight: 600;
+}
+#login-screen button:hover { background: #6a7bff; }
+
+/* Main Layout */
+#main-app { display: none; height: 100vh; grid-template-columns: 1fr 400px; grid-template-rows: 1fr auto; }
+#main-app.active { display: grid; }
+
+/* Office Map */
+#office-map {
+  background: #1e1f38; position: relative; overflow: hidden; border-right: 2px solid #2a2b4e;
+}
+.room {
+  position: absolute; border-radius: 12px; border: 2px solid rgba(255,255,255,0.1);
+  display: flex; align-items: flex-start; padding: 10px;
+}
+.room-label {
+  font-size: 0.75em; color: rgba(255,255,255,0.5); font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.room-workspace { background: rgba(100, 120, 200, 0.08); border-color: rgba(100, 120, 200, 0.2); }
+.room-meeting { background: rgba(200, 100, 100, 0.08); border-color: rgba(200, 100, 100, 0.2); }
+.room-lounge { background: rgba(100, 200, 120, 0.08); border-color: rgba(100, 200, 120, 0.2); }
+
+.character {
+  position: absolute; display: flex; flex-direction: column; align-items: center;
+  cursor: pointer; transition: all 0.5s ease; z-index: 10;
+}
+.character:hover { transform: scale(1.15); }
+.char-emoji { font-size: 2em; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.char-name {
+  font-size: 0.7em; color: #ccc; margin-top: 2px; white-space: nowrap;
+  background: rgba(0,0,0,0.5); padding: 1px 6px; border-radius: 4px;
+}
+.char-role { font-size: 0.6em; color: #888; }
+.char-status {
+  width: 8px; height: 8px; border-radius: 50%; position: absolute; top: 0; right: -2px;
+  border: 1.5px solid #1e1f38;
+}
+.status-idle { background: #4caf50; }
+.status-in-meeting { background: #ff9800; }
+.status-working { background: #f44336; }
+
+/* Chat Panel */
+#chat-panel {
+  display: flex; flex-direction: column; background: #22233d;
+}
+#chat-tabs {
+  display: flex; gap: 0; border-bottom: 2px solid #2a2b4e; flex-shrink: 0; overflow-x: auto;
+}
+.chat-tab {
+  padding: 10px 16px; cursor: pointer; font-size: 0.85em; color: #888;
+  border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.2s;
+}
+.chat-tab:hover { color: #bbb; }
+.chat-tab.active { color: #7c8dff; border-bottom-color: #7c8dff; }
+
+#chat-messages {
+  flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.msg {
+  display: flex; gap: 8px; padding: 6px 0; animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.msg-avatar { font-size: 1.5em; flex-shrink: 0; width: 32px; text-align: center; }
+.msg-body { flex: 1; min-width: 0; }
+.msg-header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }
+.msg-sender { font-weight: 600; font-size: 0.85em; color: #7c8dff; }
+.msg-time { font-size: 0.7em; color: #555; }
+.msg-content { font-size: 0.9em; line-height: 1.5; color: #ccc; word-wrap: break-word; white-space: pre-wrap; }
+.msg-system .msg-content { color: #888; font-style: italic; }
+.msg-deliverable { background: rgba(100, 200, 120, 0.08); border-left: 3px solid #4caf50; padding: 8px; border-radius: 0 8px 8px 0; margin: 4px 0; }
+.msg-deliverable .msg-content { color: #c8e6c9; }
+
+.typing-indicator { display: flex; gap: 8px; padding: 6px 0; align-items: center; }
+.typing-dots { display: flex; gap: 3px; }
+.typing-dots span {
+  width: 6px; height: 6px; border-radius: 50%; background: #7c8dff;
+  animation: bounce 1.4s infinite both;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+#chat-input-area {
+  display: flex; gap: 8px; padding: 12px; border-top: 2px solid #2a2b4e;
+}
+#chat-input {
+  flex: 1; padding: 10px 14px; border-radius: 8px; border: 2px solid #3a3b5e;
+  background: #252640; color: #e0e0e0; font-size: 0.9em; outline: none; resize: none;
+}
+#chat-input:focus { border-color: #7c8dff; }
+#send-btn {
+  padding: 10px 20px; border-radius: 8px; border: none; background: #7c8dff;
+  color: white; cursor: pointer; font-weight: 600; font-size: 0.9em;
+}
+#send-btn:hover { background: #6a7bff; }
+
+/* Controls Bar */
+#controls {
+  grid-column: 1 / -1; display: flex; gap: 12px; padding: 12px 16px;
+  background: #1a1b30; border-top: 2px solid #2a2b4e; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 16px; border-radius: 8px; border: 2px solid #3a3b5e;
+  background: transparent; color: #ccc; cursor: pointer; font-size: 0.85em;
+  transition: all 0.2s;
+}
+.ctrl-btn:hover { border-color: #7c8dff; color: #7c8dff; }
+.ctrl-btn.danger { border-color: #f44336; color: #f44336; }
+.ctrl-btn.danger:hover { background: rgba(244, 67, 54, 0.1); }
+#status-text { margin-left: auto; font-size: 0.8em; color: #666; }
+
+/* Modal */
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: #252640; border-radius: 16px; padding: 24px; width: 420px;
+  border: 2px solid #3a3b5e;
+}
+.modal h2 { margin-bottom: 16px; color: #7c8dff; font-size: 1.2em; }
+.modal label { display: block; font-size: 0.85em; color: #aaa; margin-bottom: 4px; margin-top: 12px; }
+.modal input, .modal textarea, .modal select {
+  width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #3a3b5e;
+  background: #1e1f38; color: #e0e0e0; font-size: 0.9em; outline: none;
+}
+.modal input:focus, .modal textarea:focus { border-color: #7c8dff; }
+.agent-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.agent-cb {
+  display: flex; align-items: center; gap: 4px; padding: 6px 12px;
+  background: #1e1f38; border-radius: 8px; cursor: pointer; font-size: 0.85em;
+  border: 2px solid transparent; transition: all 0.2s;
+}
+.agent-cb.selected { border-color: #7c8dff; background: rgba(124, 141, 255, 0.1); }
+.modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+.modal-actions button { padding: 8px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
+.btn-primary { background: #7c8dff; color: white; }
+.btn-secondary { background: #3a3b5e; color: #ccc; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3b5e; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <h1>🏢 Virtual Office</h1>
+  <p>Enter your name to join the office</p>
+  <input type="text" id="login-name" placeholder="Your name..." autofocus>
+  <button onclick="doLogin()">Enter Office</button>
+</div>
+
+<!-- Main App -->
+<div id="main-app">
+  <div id="office-map"></div>
+
+  <div id="chat-panel">
+    <div id="chat-tabs">
+      <div class="chat-tab active" data-channel="general">💬 General</div>
+    </div>
+    <div id="chat-messages"></div>
+    <div id="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Type a message...">
+      <button id="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="ctrl-btn" onclick="openMeetingModal()">📋 Call Meeting</button>
+    <button class="ctrl-btn" onclick="openCollabModal()">🤝 Start Collaboration</button>
+    <button class="ctrl-btn danger" id="end-meeting-btn" style="display:none" onclick="endMeeting()">⏹ End Meeting</button>
+    <button class="ctrl-btn danger" id="end-collab-btn" style="display:none" onclick="endCollab()">⏹ End Collaboration</button>
+    <span id="status-text">Ready</span>
+  </div>
+</div>
+
+<!-- Meeting Modal -->
+<div class="modal-overlay" id="meeting-modal">
+  <div class="modal">
+    <h2>📋 Call a Meeting</h2>
+    <label>Topic</label>
+    <input type="text" id="meeting-topic" placeholder="What's the meeting about?">
+    <label>Invite Agents</label>
+    <div class="agent-checkboxes" id="meeting-agents"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('meeting-modal')">Cancel</button>
+      <button class="btn-primary" onclick="startMeeting()">Start Meeting</button>
+    </div>
+  </div>
+</div>
+
+<!-- Collab Modal -->
+<div class="modal-overlay" id="collab-modal">
+  <div class="modal">
+    <h2>🤝 Start Collaboration</h2>
+    <label>Task Description</label>
+    <textarea id="collab-task" rows="3" placeholder="Describe the task for the team..."></textarea>
+    <label>Select Team</label>
+    <div class="agent-checkboxes" id="collab-agents"></div>
+    <label>Rounds</label>
+    <select id="collab-rounds">
+      <option value="2">2 rounds</option>
+      <option value="3" selected>3 rounds</option>
+      <option value="5">5 rounds</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('collab-modal')">Cancel</button>
+      <button class="btn-primary" onclick="startCollab()">Start</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- State ---
+let ws = null;
+let currentChannel = 'general';
+let userName = '';
+let agents = [];
+let activeMeeting = null;
+let activeCollab = null;
+let streamingMessages = {}; // sender_id -> element
+let channels = { general: [] }; // channel -> messages cache
+
+// --- WebSocket ---
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    setStatus('Connected');
+    ws.send(JSON.stringify({ type: 'login', name: userName }));
+  };
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    handleMessage(data);
+  };
+
+  ws.onclose = () => {
+    setStatus('Disconnected - reconnecting...');
+    setTimeout(connect, 2000);
+  };
+}
+
+function handleMessage(data) {
+  switch (data.type) {
+    case 'office_update':
+      renderOffice(data);
+      break;
+    case 'chat':
+      addChatMessage(data.message);
+      break;
+    case 'history':
+      data.messages.forEach(m => addChatMessage(m, false));
+      scrollChat();
+      break;
+    case 'typing':
+      showTyping(data);
+      break;
+    case 'chat_stream':
+      handleStream(data);
+      break;
+    case 'chat_stream_end':
+      endStream(data);
+      break;
+    case 'meeting_started':
+      activeMeeting = data.meeting;
+      addChannelTab(data.meeting.channel, `📋 Meeting`);
+      switchChannel(data.meeting.channel);
+      document.getElementById('end-meeting-btn').style.display = '';
+      setStatus(`Meeting: ${data.meeting.topic}`);
+      break;
+    case 'meeting_ended':
+      activeMeeting = null;
+      document.getElementById('end-meeting-btn').style.display = 'none';
+      switchChannel('general');
+      setStatus('Ready');
+      break;
+    case 'collab_started':
+      activeCollab = data.collab;
+      addChannelTab(data.collab.channel, `🤝 Collab`);
+      switchChannel(data.collab.channel);
+      document.getElementById('end-collab-btn').style.display = '';
+      setStatus(`Collaboration: ${data.collab.task.substring(0, 40)}...`);
+      break;
+    case 'collab_round':
+      setStatus(`Collaboration: Round ${data.round}/${data.total}`);
+      break;
+    case 'collab_complete':
+      activeCollab = null;
+      document.getElementById('end-collab-btn').style.display = 'none';
+      setStatus('Collaboration complete!');
+      break;
+    case 'collab_ended':
+      activeCollab = null;
+      document.getElementById('end-collab-btn').style.display = 'none';
+      setStatus('Ready');
+      break;
+  }
+}
+
+// --- Office Rendering ---
+function renderOffice(data) {
+  const map = document.getElementById('office-map');
+  map.innerHTML = '';
+
+  // Rooms
+  data.rooms.forEach(room => {
+    const el = document.createElement('div');
+    el.className = `room room-${room.room_type}`;
+    el.style.cssText = `left:${room.x}px; top:${room.y}px; width:${room.width}px; height:${room.height}px;`;
+    el.innerHTML = `<span class="room-label">${room.name}</span>`;
+    map.appendChild(el);
+  });
+
+  // Characters
+  agents = [];
+  data.characters.forEach(char => {
+    if (!char.is_user) agents.push(char);
+
+    const el = document.createElement('div');
+    el.className = 'character';
+    el.style.cssText = `left:${char.x - 20}px; top:${char.y - 20}px;`;
+    el.innerHTML = `
+      <div class="char-status status-${char.status}"></div>
+      <span class="char-emoji">${char.emoji}</span>
+      <span class="char-name">${char.name}</span>
+      <span class="char-role">${char.role}</span>
+    `;
+    if (!char.is_user) {
+      el.onclick = () => openDM(char.id, char.name, char.emoji);
+    }
+    map.appendChild(el);
+  });
+}
+
+// --- Chat ---
+function addChatMessage(msg, scroll = true) {
+  if (msg.channel !== currentChannel) {
+    // Cache for other channels
+    if (!channels[msg.channel]) channels[msg.channel] = [];
+    channels[msg.channel].push(msg);
+    // Flash the tab
+    const tab = document.querySelector(`.chat-tab[data-channel="${msg.channel}"]`);
+    if (tab && !tab.classList.contains('active')) tab.style.color = '#ff9800';
+    return;
+  }
+
+  removeTyping(msg.sender_id);
+  const container = document.getElementById('chat-messages');
+  const el = createMessageEl(msg);
+  container.appendChild(el);
+  if (scroll) scrollChat();
+}
+
+function createMessageEl(msg) {
+  const el = document.createElement('div');
+  let cls = 'msg';
+  if (msg.msg_type === 'system') cls += ' msg-system';
+  if (msg.msg_type === 'deliverable') cls += ' msg-deliverable';
+  el.className = cls;
+  el.innerHTML = `
+    <span class="msg-avatar">${msg.sender_emoji}</span>
+    <div class="msg-body">
+      <div class="msg-header">
+        <span class="msg-sender">${msg.sender_name}</span>
+        <span class="msg-time">${new Date(msg.timestamp * 1000).toLocaleTimeString()}</span>
+      </div>
+      <div class="msg-content">${escapeHtml(msg.content)}</div>
+    </div>
+  `;
+  return el;
+}
+
+function showTyping(data) {
+  if (data.channel !== currentChannel) return;
+  if (streamingMessages[data.sender_id]) return;
+
+  const container = document.getElementById('chat-messages');
+  const el = document.createElement('div');
+  el.className = 'typing-indicator';
+  el.id = `typing-${data.sender_id}`;
+  el.innerHTML = `
+    <span class="msg-avatar" style="font-size:1.5em; width:32px; text-align:center;"></span>
+    <span style="font-size:0.85em; color:#888;">${data.sender_name} is typing</span>
+    <div class="typing-dots"><span></span><span></span><span></span></div>
+  `;
+  container.appendChild(el);
+  scrollChat();
+}
+
+function removeTyping(senderId) {
+  const el = document.getElementById(`typing-${senderId}`);
+  if (el) el.remove();
+}
+
+function handleStream(data) {
+  if (data.channel !== currentChannel) return;
+
+  removeTyping(data.sender_id);
+
+  if (!streamingMessages[data.sender_id]) {
+    const container = document.getElementById('chat-messages');
+    const el = document.createElement('div');
+    el.className = 'msg';
+    el.innerHTML = `
+      <span class="msg-avatar">${data.sender_emoji}</span>
+      <div class="msg-body">
+        <div class="msg-header">
+          <span class="msg-sender">${data.sender_name}</span>
+          <span class="msg-time">${new Date().toLocaleTimeString()}</span>
+        </div>
+        <div class="msg-content"></div>
+      </div>
+    `;
+    container.appendChild(el);
+    streamingMessages[data.sender_id] = el.querySelector('.msg-content');
+  }
+
+  streamingMessages[data.sender_id].textContent += data.delta;
+  scrollChat();
+}
+
+function endStream(data) {
+  if (streamingMessages[data.sender_id]) {
+    // Replace with final message if available
+    if (data.message && data.channel === currentChannel) {
+      const el = streamingMessages[data.sender_id].closest('.msg');
+      if (el && data.message.msg_type === 'deliverable') {
+        el.classList.add('msg-deliverable');
+      }
+    }
+    delete streamingMessages[data.sender_id];
+  }
+}
+
+function scrollChat() {
+  const el = document.getElementById('chat-messages');
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const content = input.value.trim();
+  if (!content || !ws) return;
+
+  ws.send(JSON.stringify({
+    type: 'chat',
+    channel: currentChannel,
+    content: content,
+  }));
+  input.value = '';
+}
+
+// --- Channels ---
+function switchChannel(channel) {
+  currentChannel = channel;
+
+  // Update tabs
+  document.querySelectorAll('.chat-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.channel === channel);
+    if (t.dataset.channel === channel) t.style.color = '';
+  });
+
+  // Clear and reload messages
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = '';
+  streamingMessages = {};
+
+  // Load cached messages
+  if (channels[channel]) {
+    channels[channel].forEach(m => {
+      const el = createMessageEl(m);
+      container.appendChild(el);
+    });
+    scrollChat();
+  }
+}
+
+function addChannelTab(channel, label) {
+  if (document.querySelector(`.chat-tab[data-channel="${channel}"]`)) return;
+  channels[channel] = [];
+
+  const tab = document.createElement('div');
+  tab.className = 'chat-tab';
+  tab.dataset.channel = channel;
+  tab.textContent = label;
+  tab.onclick = () => switchChannel(channel);
+  document.getElementById('chat-tabs').appendChild(tab);
+}
+
+function openDM(agentId, agentName, agentEmoji) {
+  const channel = `dm:user:${agentId}`;
+  addChannelTab(channel, `${agentEmoji} ${agentName}`);
+  switchChannel(channel);
+}
+
+// --- Meeting ---
+function openMeetingModal() {
+  const container = document.getElementById('meeting-agents');
+  container.innerHTML = '';
+  agents.forEach(a => {
+    const el = document.createElement('div');
+    el.className = 'agent-cb selected';
+    el.dataset.id = a.id;
+    el.textContent = `${a.emoji} ${a.name}`;
+    el.onclick = () => el.classList.toggle('selected');
+    container.appendChild(el);
+  });
+  document.getElementById('meeting-modal').classList.add('active');
+}
+
+function startMeeting() {
+  const topic = document.getElementById('meeting-topic').value.trim() || 'General Discussion';
+  const selected = [...document.querySelectorAll('#meeting-agents .agent-cb.selected')].map(e => e.dataset.id);
+
+  if (selected.length === 0) return;
+
+  ws.send(JSON.stringify({
+    type: 'meeting_start',
+    topic: topic,
+    agents: selected,
+  }));
+  closeModal('meeting-modal');
+}
+
+function endMeeting() {
+  if (!activeMeeting) return;
+  ws.send(JSON.stringify({ type: 'meeting_end', meeting_id: activeMeeting.id }));
+}
+
+// --- Collaboration ---
+function openCollabModal() {
+  const container = document.getElementById('collab-agents');
+  container.innerHTML = '';
+  agents.forEach(a => {
+    const el = document.createElement('div');
+    el.className = 'agent-cb selected';
+    el.dataset.id = a.id;
+    el.textContent = `${a.emoji} ${a.name}`;
+    el.onclick = () => el.classList.toggle('selected');
+    container.appendChild(el);
+  });
+  document.getElementById('collab-modal').classList.add('active');
+}
+
+function startCollab() {
+  const task = document.getElementById('collab-task').value.trim();
+  const selected = [...document.querySelectorAll('#collab-agents .agent-cb.selected')].map(e => e.dataset.id);
+  const rounds = parseInt(document.getElementById('collab-rounds').value);
+
+  if (!task || selected.length === 0) return;
+
+  ws.send(JSON.stringify({
+    type: 'collab_start',
+    task: task,
+    agents: selected,
+    rounds: rounds,
+  }));
+  closeModal('collab-modal');
+}
+
+function endCollab() {
+  if (!activeCollab) return;
+  ws.send(JSON.stringify({ type: 'collab_end', collab_id: activeCollab.id }));
+}
+
+// --- Util ---
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function setStatus(text) {
+  document.getElementById('status-text').textContent = text;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function doLogin() {
+  userName = document.getElementById('login-name').value.trim();
+  if (!userName) return;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-app').classList.add('active');
+  connect();
+}
+
+// Enter key handlers
+document.getElementById('login-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Click outside modal to close
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => {
+    if (e.target === el) el.classList.remove('active');
+  });
+});
+</script>
+</body>
+</html>
