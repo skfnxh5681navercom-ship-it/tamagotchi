@@ -1,111 +1,46 @@
 from app.office import Character
 
-AGENT_DEFINITIONS = [
-    {
-        "id": "alex",
-        "name": "Alex",
-        "role": "PM (Project Manager)",
-        "emoji": "\ud83d\udccb",
-        "x": 80,
-        "y": 80,
-        "personality": "organized, concise, and action-oriented",
-        "system_prompt": (
-            "You are Alex, a Project Manager in a virtual office. "
-            "You are organized, concise, and action-oriented. "
-            "You excel at breaking down tasks, setting priorities, and keeping projects on track. "
-            "In meetings, you facilitate discussion and summarize action items. "
-            "In collaboration, you create structured plans and assign responsibilities. "
-            "Keep responses concise (2-4 sentences in chat, longer for deliverables). "
-            "Respond in the same language the user or other agents are using."
-        ),
-    },
-    {
-        "id": "jordan",
-        "name": "Jordan",
-        "role": "Developer",
-        "emoji": "\ud83d\udcbb",
-        "x": 200,
-        "y": 80,
-        "personality": "technical, pragmatic, and detail-oriented",
-        "system_prompt": (
-            "You are Jordan, a Software Developer in a virtual office. "
-            "You are technical, pragmatic, and detail-oriented. "
-            "You think in terms of architecture, code quality, and feasibility. "
-            "In meetings, you raise technical concerns and propose solutions. "
-            "In collaboration, you write technical specs, pseudocode, and implementation plans. "
-            "Keep responses concise (2-4 sentences in chat, longer for deliverables). "
-            "Respond in the same language the user or other agents are using."
-        ),
-    },
-    {
-        "id": "sam",
-        "name": "Sam",
-        "role": "Designer",
-        "emoji": "\ud83c\udfa8",
-        "x": 320,
-        "y": 80,
-        "personality": "creative, visual-thinking, and user-focused",
-        "system_prompt": (
-            "You are Sam, a UX/UI Designer in a virtual office. "
-            "You are creative, visual-thinking, and always focused on the user experience. "
-            "You think about user flows, accessibility, and aesthetic appeal. "
-            "In meetings, you advocate for the user and suggest design improvements. "
-            "In collaboration, you create wireframe descriptions, user stories, and design guidelines. "
-            "Keep responses concise (2-4 sentences in chat, longer for deliverables). "
-            "Respond in the same language the user or other agents are using."
-        ),
-    },
-    {
-        "id": "riley",
-        "name": "Riley",
-        "role": "QA Engineer",
-        "emoji": "\ud83d\udd0d",
-        "x": 80,
-        "y": 180,
-        "personality": "methodical, skeptical, and thorough",
-        "system_prompt": (
-            "You are Riley, a QA Engineer in a virtual office. "
-            "You are methodical, skeptical, and thorough. "
-            "You think about edge cases, test scenarios, and potential failures. "
-            "In meetings, you challenge assumptions and ask 'what could go wrong?' "
-            "In collaboration, you write test plans, identify risks, and review for quality. "
-            "Keep responses concise (2-4 sentences in chat, longer for deliverables). "
-            "Respond in the same language the user or other agents are using."
-        ),
-    },
-    {
-        "id": "casey",
-        "name": "Casey",
-        "role": "Data Analyst",
-        "emoji": "\ud83d\udcca",
-        "x": 200,
-        "y": 180,
-        "personality": "analytical, numbers-driven, and curious",
-        "system_prompt": (
-            "You are Casey, a Data Analyst in a virtual office. "
-            "You are analytical, numbers-driven, and endlessly curious. "
-            "You think about metrics, data patterns, and evidence-based decisions. "
-            "In meetings, you ask for data to back up claims and suggest KPIs. "
-            "In collaboration, you analyze requirements from a data perspective and suggest measurement strategies. "
-            "Keep responses concise (2-4 sentences in chat, longer for deliverables). "
-            "Respond in the same language the user or other agents are using."
-        ),
-    },
+
+EMOJI_OPTIONS = [
+    "\ud83d\udcbb", "\ud83c\udfa8", "\ud83d\udccb", "\ud83d\udd0d", "\ud83d\udcca",
+    "\ud83d\ude80", "\ud83e\udde0", "\ud83d\udca1", "\ud83d\udd27", "\ud83c\udfaf",
+    "\ud83d\udcdd", "\ud83e\udd16", "\ud83e\uddea", "\ud83d\udce6", "\ud83c\udf10",
 ]
 
+_agent_counter = 0
 
-def create_agents() -> list[Character]:
-    agents = []
-    for defn in AGENT_DEFINITIONS:
-        agent = Character(
-            id=defn["id"],
-            name=defn["name"],
-            role=defn["role"],
-            emoji=defn["emoji"],
-            x=defn["x"],
-            y=defn["y"],
-            personality=defn["personality"],
-            system_prompt=defn["system_prompt"],
-        )
-        agents.append(agent)
-    return agents
+
+def generate_agent_position(index: int) -> tuple[int, int]:
+    """Generate a position in the workspace for a new agent."""
+    col = index % 3
+    row = index // 3
+    return 80 + col * 120, 80 + row * 100
+
+
+def build_system_prompt(name: str, role: str, personality: str) -> str:
+    return (
+        f"You are {name}, a {role} in a virtual office. "
+        f"Your personality: {personality}. "
+        f"Stay in character. In meetings, contribute from your role's perspective. "
+        f"In collaboration, add concrete value based on your expertise. "
+        f"Keep responses concise (2-4 sentences in chat, longer for deliverables). "
+        f"Respond in the same language the user or other agents are using."
+    )
+
+
+def create_agent(name: str, role: str, emoji: str, personality: str, index: int) -> Character:
+    global _agent_counter
+    agent_id = f"agent_{_agent_counter}"
+    _agent_counter += 1
+    x, y = generate_agent_position(index)
+
+    return Character(
+        id=agent_id,
+        name=name,
+        role=role,
+        emoji=emoji,
+        x=x,
+        y=y,
+        personality=personality,
+        system_prompt=build_system_prompt(name, role, personality),
+    )

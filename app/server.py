@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.office import OfficeState, Character
-from app.agents import create_agents
+from app.agents import create_agent, EMOJI_OPTIONS
 from app.chat import ChatManager
 from app.claude_client import AgentBrain
 
@@ -20,11 +20,6 @@ chat_mgr = ChatManager()
 agent_brains: dict[str, AgentBrain] = {}
 active_connections: list[WebSocket] = []
 user_character: Character | None = None
-
-# Initialize agents
-for agent in create_agents():
-    office.add_character(agent)
-    agent_brains[agent.id] = AgentBrain(agent)
 
 
 async def broadcast(data: dict):
@@ -73,6 +68,12 @@ async def websocket_endpoint(ws: WebSocket):
             **office.get_state(),
         }, ensure_ascii=False))
 
+        # Send emoji options
+        await ws.send_text(json.dumps({
+            "type": "emoji_options",
+            "emojis": EMOJI_OPTIONS,
+        }, ensure_ascii=False))
+
         # Send existing general chat
         await ws.send_text(json.dumps({
             "type": "history",
@@ -89,6 +90,10 @@ async def websocket_endpoint(ws: WebSocket):
                 await handle_login(ws, data)
             elif msg_type == "chat":
                 await handle_chat(ws, data)
+            elif msg_type == "add_agent":
+                await handle_add_agent(ws, data)
+            elif msg_type == "remove_agent":
+                await handle_remove_agent(ws, data)
             elif msg_type == "meeting_start":
                 await handle_meeting_start(ws, data)
             elif msg_type == "meeting_end":
@@ -122,10 +127,64 @@ async def handle_login(ws: WebSocket, data: dict):
     )
     office.add_character(user_character)
 
-    # Announce
     msg = chat_mgr.add_message(
         "general", "system", "System", "\u2699\ufe0f",
         f"{name} has entered the office!",
+        msg_type="system",
+    )
+    await broadcast({"type": "office_update", **office.get_state()})
+    await broadcast({"type": "chat", "message": msg.to_dict()})
+
+
+async def handle_add_agent(ws: WebSocket, data: dict):
+    name = data.get("name", "").strip()
+    role = data.get("role", "").strip()
+    emoji = data.get("emoji", "\ud83e\udd16")
+    personality = data.get("personality", "").strip()
+
+    if not name or not role:
+        return
+
+    index = len(agent_brains)
+    agent = create_agent(name, role, emoji, personality or f"a skilled {role}")
+    office.add_character(agent)
+    agent_brains[agent.id] = AgentBrain(agent)
+
+    # Reposition all agents neatly
+    for i, aid in enumerate(agent_brains):
+        from app.agents import generate_agent_position
+        x, y = generate_agent_position(i)
+        office.move_character(aid, x, y)
+
+    msg = chat_mgr.add_message(
+        "general", "system", "System", "\u2699\ufe0f",
+        f"{emoji} {name} ({role}) has joined the office!",
+        msg_type="system",
+    )
+    await broadcast({"type": "office_update", **office.get_state()})
+    await broadcast({"type": "chat", "message": msg.to_dict()})
+
+
+async def handle_remove_agent(ws: WebSocket, data: dict):
+    agent_id = data.get("agent_id", "")
+    if agent_id not in agent_brains:
+        return
+
+    agent = office.characters.get(agent_id)
+    name = agent.name if agent else agent_id
+
+    office.remove_character(agent_id)
+    del agent_brains[agent_id]
+
+    # Reposition remaining agents
+    for i, aid in enumerate(agent_brains):
+        from app.agents import generate_agent_position
+        x, y = generate_agent_position(i)
+        office.move_character(aid, x, y)
+
+    msg = chat_mgr.add_message(
+        "general", "system", "System", "\u2699\ufe0f",
+        f"{name} has left the office.",
         msg_type="system",
     )
     await broadcast({"type": "office_update", **office.get_state()})
@@ -138,27 +197,22 @@ async def handle_chat(ws: WebSocket, data: dict):
     if not content or not user_character:
         return
 
-    # Add user message
     msg = chat_mgr.add_message(
         channel, user_character.id, user_character.name, user_character.emoji, content
     )
     await broadcast({"type": "chat", "message": msg.to_dict()})
 
-    # Add to agent brains' histories
     for aid, brain in agent_brains.items():
         brain.add_message(channel, "user", user_character.name, content)
 
-    # Determine which agents should respond
     responding_agents = _get_responding_agents(channel)
 
-    # Agents respond
     for agent_id in responding_agents:
         if agent_id not in agent_brains:
             continue
         brain = agent_brains[agent_id]
         agent = office.characters[agent_id]
 
-        # Signal typing
         await broadcast({
             "type": "typing",
             "channel": channel,
@@ -178,7 +232,6 @@ async def handle_chat(ws: WebSocket, data: dict):
                 "delta": chunk,
             })
 
-        # Add completed message to chat manager
         completed_msg = chat_mgr.add_message(
             channel, agent_id, agent.name, agent.emoji, full_text
         )
@@ -189,33 +242,31 @@ async def handle_chat(ws: WebSocket, data: dict):
             "message": completed_msg.to_dict(),
         })
 
-        # Add to other agents' histories
         for other_id, other_brain in agent_brains.items():
             if other_id != agent_id:
                 other_brain.add_message(channel, "assistant", agent.name, full_text)
 
 
 def _get_responding_agents(channel: str) -> list[str]:
-    """Determine which agents should respond based on channel type."""
+    if not agent_brains:
+        return []
+
     if channel == "general":
-        # In general chat, a random 1-2 agents respond
         import random
-        agent_ids = [aid for aid in agent_brains.keys()]
-        count = random.randint(1, 2)
-        return random.sample(agent_ids, min(count, len(agent_ids)))
+        agent_ids = list(agent_brains.keys())
+        count = random.randint(1, min(2, len(agent_ids)))
+        return random.sample(agent_ids, count)
 
     elif channel.startswith("dm:"):
-        # DM: only the target agent responds
         parts = channel.split(":")
         target = parts[2] if len(parts) > 2 else parts[1]
         return [target] if target in agent_brains else []
 
     elif channel.startswith("meeting:"):
-        # Meeting: all meeting participants respond
         meeting_id = channel.split(":")[1]
         meeting = chat_mgr.meetings.get(meeting_id)
         if meeting and meeting.active:
-            return list(meeting.agent_ids)
+            return [aid for aid in meeting.agent_ids if aid in agent_brains]
         return []
 
     return []
@@ -228,13 +279,16 @@ async def handle_meeting_start(ws: WebSocket, data: dict):
     if not agent_ids:
         agent_ids = list(agent_brains.keys())
 
+    # Filter to only existing agents
+    agent_ids = [aid for aid in agent_ids if aid in agent_brains]
+    if not agent_ids:
+        return
+
     meeting = chat_mgr.create_meeting(topic, agent_ids)
 
-    # Move agents to meeting room
     all_ids = agent_ids + (["user"] if user_character else [])
     office.move_to_meeting(all_ids, "meeting-a")
 
-    # System message in meeting channel
     agent_names = ", ".join(
         office.characters[aid].name for aid in agent_ids if aid in office.characters
     )
@@ -244,7 +298,6 @@ async def handle_meeting_start(ws: WebSocket, data: dict):
         msg_type="system",
     )
 
-    # Add meeting context to agent brains
     for aid in agent_ids:
         if aid in agent_brains:
             agent_brains[aid].add_message(
@@ -276,7 +329,6 @@ async def handle_meeting_end(ws: WebSocket, data: dict):
     if not meeting:
         return
 
-    # Return agents to positions
     all_ids = meeting.agent_ids + (["user"] if user_character else [])
     office.return_from_meeting(all_ids)
 
@@ -288,10 +340,7 @@ async def handle_meeting_end(ws: WebSocket, data: dict):
 
     await broadcast({"type": "office_update", **office.get_state()})
     await broadcast({"type": "chat", "message": sys_msg.to_dict()})
-    await broadcast({
-        "type": "meeting_ended",
-        "meeting_id": meeting_id,
-    })
+    await broadcast({"type": "meeting_ended", "meeting_id": meeting_id})
 
 
 async def handle_collab_start(ws: WebSocket, data: dict):
@@ -302,9 +351,12 @@ async def handle_collab_start(ws: WebSocket, data: dict):
     if not task or not agent_ids:
         return
 
+    agent_ids = [aid for aid in agent_ids if aid in agent_brains]
+    if not agent_ids:
+        return
+
     collab = chat_mgr.create_collab(task, agent_ids, rounds)
 
-    # Set agents to working
     for aid in agent_ids:
         office.set_status(aid, "working")
 
@@ -330,15 +382,12 @@ async def handle_collab_start(ws: WebSocket, data: dict):
     })
     await broadcast({"type": "chat", "message": sys_msg.to_dict()})
 
-    # Start the collaboration loop as background task
     task_handle = asyncio.create_task(_run_collab(collab))
     chat_mgr._collab_tasks[collab.id] = task_handle
 
 
 async def _run_collab(collab):
-    """Run the autonomous collaboration loop."""
     try:
-        # Initialize agent brains with the task
         for aid in collab.agent_ids:
             if aid in agent_brains:
                 agent_brains[aid].add_message(
@@ -354,7 +403,6 @@ async def _run_collab(collab):
                 break
 
             collab.current_round = round_num
-
             await broadcast({
                 "type": "collab_round",
                 "collab_id": collab.id,
@@ -371,7 +419,6 @@ async def _run_collab(collab):
                 brain = agent_brains[agent_id]
                 agent = office.characters[agent_id]
 
-                # Signal typing
                 await broadcast({
                     "type": "typing",
                     "channel": collab.channel,
@@ -401,19 +448,17 @@ async def _run_collab(collab):
                     "message": completed_msg.to_dict(),
                 })
 
-                # Add to other agents' histories
                 for other_id in collab.agent_ids:
                     if other_id != agent_id and other_id in agent_brains:
                         agent_brains[other_id].add_message(
                             collab.channel, "user", agent.name, full_text
                         )
 
-                # Small delay between agents
                 await asyncio.sleep(0.5)
 
-        # Collaboration complete - ask last agent (or PM if present) to summarize
+        # Summarize - use the first agent
         if collab.active:
-            summarizer_id = "alex" if "alex" in collab.agent_ids else collab.agent_ids[-1]
+            summarizer_id = collab.agent_ids[0]
             brain = agent_brains[summarizer_id]
             agent = office.characters[summarizer_id]
 
@@ -457,7 +502,6 @@ async def _run_collab(collab):
             collab.deliverable = full_text
             collab.active = False
 
-            # Reset agent statuses
             for aid in collab.agent_ids:
                 office.set_status(aid, "idle")
 

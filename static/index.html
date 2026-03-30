@@ -65,6 +65,14 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 .status-in-meeting { background: #ff9800; }
 .status-working { background: #f44336; }
 
+.char-delete {
+  display: none; position: absolute; top: -8px; left: -8px;
+  width: 18px; height: 18px; border-radius: 50%; background: #f44336;
+  color: white; font-size: 11px; line-height: 18px; text-align: center;
+  cursor: pointer; z-index: 20; border: none;
+}
+.character:hover .char-delete { display: block; }
+
 /* Chat Panel */
 #chat-panel {
   display: flex; flex-direction: column; background: #22233d;
@@ -126,7 +134,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 /* Controls Bar */
 #controls {
   grid-column: 1 / -1; display: flex; gap: 12px; padding: 12px 16px;
-  background: #1a1b30; border-top: 2px solid #2a2b4e; align-items: center;
+  background: #1a1b30; border-top: 2px solid #2a2b4e; align-items: center; flex-wrap: wrap;
 }
 .ctrl-btn {
   padding: 8px 16px; border-radius: 8px; border: 2px solid #3a3b5e;
@@ -136,6 +144,8 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 .ctrl-btn:hover { border-color: #7c8dff; color: #7c8dff; }
 .ctrl-btn.danger { border-color: #f44336; color: #f44336; }
 .ctrl-btn.danger:hover { background: rgba(244, 67, 54, 0.1); }
+.ctrl-btn.accent { border-color: #4caf50; color: #4caf50; }
+.ctrl-btn.accent:hover { background: rgba(76, 175, 80, 0.1); }
 #status-text { margin-left: auto; font-size: 0.8em; color: #666; }
 
 /* Modal */
@@ -145,8 +155,8 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 }
 .modal-overlay.active { display: flex; }
 .modal {
-  background: #252640; border-radius: 16px; padding: 24px; width: 420px;
-  border: 2px solid #3a3b5e;
+  background: #252640; border-radius: 16px; padding: 24px; width: 440px;
+  border: 2px solid #3a3b5e; max-height: 90vh; overflow-y: auto;
 }
 .modal h2 { margin-bottom: 16px; color: #7c8dff; font-size: 1.2em; }
 .modal label { display: block; font-size: 0.85em; color: #aaa; margin-bottom: 4px; margin-top: 12px; }
@@ -165,7 +175,27 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 .modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
 .modal-actions button { padding: 8px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
 .btn-primary { background: #7c8dff; color: white; }
+.btn-primary:hover { background: #6a7bff; }
 .btn-secondary { background: #3a3b5e; color: #ccc; }
+
+/* Emoji Picker */
+.emoji-picker {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+}
+.emoji-option {
+  width: 36px; height: 36px; font-size: 1.3em; display: flex; align-items: center;
+  justify-content: center; border-radius: 8px; cursor: pointer; border: 2px solid transparent;
+  background: #1e1f38; transition: all 0.2s;
+}
+.emoji-option:hover { border-color: #555; }
+.emoji-option.selected { border-color: #7c8dff; background: rgba(124, 141, 255, 0.15); }
+
+/* No agents notice */
+.empty-office {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  text-align: center; color: #555;
+}
+.empty-office p { margin-bottom: 8px; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
@@ -177,7 +207,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 
 <!-- Login Screen -->
 <div id="login-screen">
-  <h1>🏢 Virtual Office</h1>
+  <h1>Virtual Office</h1>
   <p>Enter your name to join the office</p>
   <input type="text" id="login-name" placeholder="Your name..." autofocus>
   <button onclick="doLogin()">Enter Office</button>
@@ -189,7 +219,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 
   <div id="chat-panel">
     <div id="chat-tabs">
-      <div class="chat-tab active" data-channel="general">💬 General</div>
+      <div class="chat-tab active" data-channel="general">General</div>
     </div>
     <div id="chat-messages"></div>
     <div id="chat-input-area">
@@ -199,18 +229,38 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
   </div>
 
   <div id="controls">
-    <button class="ctrl-btn" onclick="openMeetingModal()">📋 Call Meeting</button>
-    <button class="ctrl-btn" onclick="openCollabModal()">🤝 Start Collaboration</button>
-    <button class="ctrl-btn danger" id="end-meeting-btn" style="display:none" onclick="endMeeting()">⏹ End Meeting</button>
-    <button class="ctrl-btn danger" id="end-collab-btn" style="display:none" onclick="endCollab()">⏹ End Collaboration</button>
+    <button class="ctrl-btn accent" onclick="openAddAgentModal()">+ Add Agent</button>
+    <button class="ctrl-btn" onclick="openMeetingModal()">Call Meeting</button>
+    <button class="ctrl-btn" onclick="openCollabModal()">Start Collaboration</button>
+    <button class="ctrl-btn danger" id="end-meeting-btn" style="display:none" onclick="endMeeting()">End Meeting</button>
+    <button class="ctrl-btn danger" id="end-collab-btn" style="display:none" onclick="endCollab()">End Collaboration</button>
     <span id="status-text">Ready</span>
+  </div>
+</div>
+
+<!-- Add Agent Modal -->
+<div class="modal-overlay" id="add-agent-modal">
+  <div class="modal">
+    <h2>Add New Agent</h2>
+    <label>Name</label>
+    <input type="text" id="agent-name" placeholder="e.g. Alex, Jordan...">
+    <label>Role</label>
+    <input type="text" id="agent-role" placeholder="e.g. Developer, PM, Designer...">
+    <label>Personality</label>
+    <textarea id="agent-personality" rows="2" placeholder="e.g. analytical and detail-oriented, always asks clarifying questions"></textarea>
+    <label>Emoji</label>
+    <div class="emoji-picker" id="emoji-picker"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('add-agent-modal')">Cancel</button>
+      <button class="btn-primary" onclick="addAgent()">Add Agent</button>
+    </div>
   </div>
 </div>
 
 <!-- Meeting Modal -->
 <div class="modal-overlay" id="meeting-modal">
   <div class="modal">
-    <h2>📋 Call a Meeting</h2>
+    <h2>Call a Meeting</h2>
     <label>Topic</label>
     <input type="text" id="meeting-topic" placeholder="What's the meeting about?">
     <label>Invite Agents</label>
@@ -225,7 +275,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 <!-- Collab Modal -->
 <div class="modal-overlay" id="collab-modal">
   <div class="modal">
-    <h2>🤝 Start Collaboration</h2>
+    <h2>Start Collaboration</h2>
     <label>Task Description</label>
     <textarea id="collab-task" rows="3" placeholder="Describe the task for the team..."></textarea>
     <label>Select Team</label>
@@ -249,10 +299,12 @@ let ws = null;
 let currentChannel = 'general';
 let userName = '';
 let agents = [];
+let emojiOptions = [];
+let selectedEmoji = '';
 let activeMeeting = null;
 let activeCollab = null;
-let streamingMessages = {}; // sender_id -> element
-let channels = { general: [] }; // channel -> messages cache
+let streamingMessages = {};
+let channels = { general: [] };
 
 // --- WebSocket ---
 function connect() {
@@ -280,6 +332,10 @@ function handleMessage(data) {
     case 'office_update':
       renderOffice(data);
       break;
+    case 'emoji_options':
+      emojiOptions = data.emojis;
+      selectedEmoji = emojiOptions[0] || '';
+      break;
     case 'chat':
       addChatMessage(data.message);
       break;
@@ -298,10 +354,10 @@ function handleMessage(data) {
       break;
     case 'meeting_started':
       activeMeeting = data.meeting;
-      addChannelTab(data.meeting.channel, `📋 Meeting`);
+      addChannelTab(data.meeting.channel, 'Meeting');
       switchChannel(data.meeting.channel);
       document.getElementById('end-meeting-btn').style.display = '';
-      setStatus(`Meeting: ${data.meeting.topic}`);
+      setStatus('Meeting: ' + data.meeting.topic);
       break;
     case 'meeting_ended':
       activeMeeting = null;
@@ -311,13 +367,13 @@ function handleMessage(data) {
       break;
     case 'collab_started':
       activeCollab = data.collab;
-      addChannelTab(data.collab.channel, `🤝 Collab`);
+      addChannelTab(data.collab.channel, 'Collab');
       switchChannel(data.collab.channel);
       document.getElementById('end-collab-btn').style.display = '';
-      setStatus(`Collaboration: ${data.collab.task.substring(0, 40)}...`);
+      setStatus('Collaboration: ' + data.collab.task.substring(0, 40) + '...');
       break;
     case 'collab_round':
-      setStatus(`Collaboration: Round ${data.round}/${data.total}`);
+      setStatus('Collaboration: Round ' + data.round + '/' + data.total);
       break;
     case 'collab_complete':
       activeCollab = null;
@@ -337,44 +393,108 @@ function renderOffice(data) {
   const map = document.getElementById('office-map');
   map.innerHTML = '';
 
-  // Rooms
   data.rooms.forEach(room => {
     const el = document.createElement('div');
-    el.className = `room room-${room.room_type}`;
-    el.style.cssText = `left:${room.x}px; top:${room.y}px; width:${room.width}px; height:${room.height}px;`;
-    el.innerHTML = `<span class="room-label">${room.name}</span>`;
+    el.className = 'room room-' + room.room_type;
+    el.style.cssText = 'left:' + room.x + 'px; top:' + room.y + 'px; width:' + room.width + 'px; height:' + room.height + 'px;';
+    el.innerHTML = '<span class="room-label">' + room.name + '</span>';
     map.appendChild(el);
   });
 
-  // Characters
   agents = [];
   data.characters.forEach(char => {
     if (!char.is_user) agents.push(char);
 
     const el = document.createElement('div');
     el.className = 'character';
-    el.style.cssText = `left:${char.x - 20}px; top:${char.y - 20}px;`;
-    el.innerHTML = `
-      <div class="char-status status-${char.status}"></div>
-      <span class="char-emoji">${char.emoji}</span>
-      <span class="char-name">${char.name}</span>
-      <span class="char-role">${char.role}</span>
-    `;
+    el.style.cssText = 'left:' + (char.x - 20) + 'px; top:' + (char.y - 20) + 'px;';
+
+    let inner = '<div class="char-status status-' + char.status + '"></div>' +
+      '<span class="char-emoji">' + char.emoji + '</span>' +
+      '<span class="char-name">' + char.name + '</span>' +
+      '<span class="char-role">' + char.role + '</span>';
+
     if (!char.is_user) {
-      el.onclick = () => openDM(char.id, char.name, char.emoji);
+      inner = '<button class="char-delete" onclick="removeAgent(event, \'' + char.id + '\')" title="Remove agent">x</button>' + inner;
+    }
+
+    el.innerHTML = inner;
+    if (!char.is_user) {
+      el.onclick = (e) => {
+        if (e.target.classList.contains('char-delete')) return;
+        openDM(char.id, char.name, char.emoji);
+      };
     }
     map.appendChild(el);
   });
+
+  // Show empty state if no agents
+  if (agents.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-office';
+    empty.innerHTML = '<p style="font-size:2em;">~</p><p>No agents yet</p><p style="font-size:0.85em;">Click "+ Add Agent" to create your team</p>';
+    map.appendChild(empty);
+  }
+}
+
+// --- Add / Remove Agent ---
+function openAddAgentModal() {
+  document.getElementById('agent-name').value = '';
+  document.getElementById('agent-role').value = '';
+  document.getElementById('agent-personality').value = '';
+
+  const picker = document.getElementById('emoji-picker');
+  picker.innerHTML = '';
+  selectedEmoji = emojiOptions[0] || '';
+  emojiOptions.forEach((em, i) => {
+    const el = document.createElement('div');
+    el.className = 'emoji-option' + (i === 0 ? ' selected' : '');
+    el.textContent = em;
+    el.onclick = () => {
+      picker.querySelectorAll('.emoji-option').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedEmoji = em;
+    };
+    picker.appendChild(el);
+  });
+
+  document.getElementById('add-agent-modal').classList.add('active');
+  document.getElementById('agent-name').focus();
+}
+
+function addAgent() {
+  const name = document.getElementById('agent-name').value.trim();
+  const role = document.getElementById('agent-role').value.trim();
+  const personality = document.getElementById('agent-personality').value.trim();
+
+  if (!name || !role) {
+    document.getElementById('agent-name').style.borderColor = name ? '#3a3b5e' : '#f44336';
+    document.getElementById('agent-role').style.borderColor = role ? '#3a3b5e' : '#f44336';
+    return;
+  }
+
+  ws.send(JSON.stringify({
+    type: 'add_agent',
+    name: name,
+    role: role,
+    emoji: selectedEmoji,
+    personality: personality,
+  }));
+  closeModal('add-agent-modal');
+}
+
+function removeAgent(event, agentId) {
+  event.stopPropagation();
+  if (!confirm('Remove this agent from the office?')) return;
+  ws.send(JSON.stringify({ type: 'remove_agent', agent_id: agentId }));
 }
 
 // --- Chat ---
 function addChatMessage(msg, scroll = true) {
   if (msg.channel !== currentChannel) {
-    // Cache for other channels
     if (!channels[msg.channel]) channels[msg.channel] = [];
     channels[msg.channel].push(msg);
-    // Flash the tab
-    const tab = document.querySelector(`.chat-tab[data-channel="${msg.channel}"]`);
+    const tab = document.querySelector('.chat-tab[data-channel="' + msg.channel + '"]');
     if (tab && !tab.classList.contains('active')) tab.style.color = '#ff9800';
     return;
   }
@@ -392,16 +512,14 @@ function createMessageEl(msg) {
   if (msg.msg_type === 'system') cls += ' msg-system';
   if (msg.msg_type === 'deliverable') cls += ' msg-deliverable';
   el.className = cls;
-  el.innerHTML = `
-    <span class="msg-avatar">${msg.sender_emoji}</span>
-    <div class="msg-body">
-      <div class="msg-header">
-        <span class="msg-sender">${msg.sender_name}</span>
-        <span class="msg-time">${new Date(msg.timestamp * 1000).toLocaleTimeString()}</span>
-      </div>
-      <div class="msg-content">${escapeHtml(msg.content)}</div>
-    </div>
-  `;
+  el.innerHTML = '<span class="msg-avatar">' + msg.sender_emoji + '</span>' +
+    '<div class="msg-body">' +
+      '<div class="msg-header">' +
+        '<span class="msg-sender">' + msg.sender_name + '</span>' +
+        '<span class="msg-time">' + new Date(msg.timestamp * 1000).toLocaleTimeString() + '</span>' +
+      '</div>' +
+      '<div class="msg-content">' + escapeHtml(msg.content) + '</div>' +
+    '</div>';
   return el;
 }
 
@@ -412,40 +530,35 @@ function showTyping(data) {
   const container = document.getElementById('chat-messages');
   const el = document.createElement('div');
   el.className = 'typing-indicator';
-  el.id = `typing-${data.sender_id}`;
-  el.innerHTML = `
-    <span class="msg-avatar" style="font-size:1.5em; width:32px; text-align:center;"></span>
-    <span style="font-size:0.85em; color:#888;">${data.sender_name} is typing</span>
-    <div class="typing-dots"><span></span><span></span><span></span></div>
-  `;
+  el.id = 'typing-' + data.sender_id;
+  el.innerHTML = '<span class="msg-avatar" style="font-size:1.5em; width:32px; text-align:center;"></span>' +
+    '<span style="font-size:0.85em; color:#888;">' + data.sender_name + ' is typing</span>' +
+    '<div class="typing-dots"><span></span><span></span><span></span></div>';
   container.appendChild(el);
   scrollChat();
 }
 
 function removeTyping(senderId) {
-  const el = document.getElementById(`typing-${senderId}`);
+  const el = document.getElementById('typing-' + senderId);
   if (el) el.remove();
 }
 
 function handleStream(data) {
   if (data.channel !== currentChannel) return;
-
   removeTyping(data.sender_id);
 
   if (!streamingMessages[data.sender_id]) {
     const container = document.getElementById('chat-messages');
     const el = document.createElement('div');
     el.className = 'msg';
-    el.innerHTML = `
-      <span class="msg-avatar">${data.sender_emoji}</span>
-      <div class="msg-body">
-        <div class="msg-header">
-          <span class="msg-sender">${data.sender_name}</span>
-          <span class="msg-time">${new Date().toLocaleTimeString()}</span>
-        </div>
-        <div class="msg-content"></div>
-      </div>
-    `;
+    el.innerHTML = '<span class="msg-avatar">' + data.sender_emoji + '</span>' +
+      '<div class="msg-body">' +
+        '<div class="msg-header">' +
+          '<span class="msg-sender">' + data.sender_name + '</span>' +
+          '<span class="msg-time">' + new Date().toLocaleTimeString() + '</span>' +
+        '</div>' +
+        '<div class="msg-content"></div>' +
+      '</div>';
     container.appendChild(el);
     streamingMessages[data.sender_id] = el.querySelector('.msg-content');
   }
@@ -456,7 +569,6 @@ function handleStream(data) {
 
 function endStream(data) {
   if (streamingMessages[data.sender_id]) {
-    // Replace with final message if available
     if (data.message && data.channel === currentChannel) {
       const el = streamingMessages[data.sender_id].closest('.msg');
       if (el && data.message.msg_type === 'deliverable') {
@@ -477,30 +589,22 @@ function sendMessage() {
   const content = input.value.trim();
   if (!content || !ws) return;
 
-  ws.send(JSON.stringify({
-    type: 'chat',
-    channel: currentChannel,
-    content: content,
-  }));
+  ws.send(JSON.stringify({ type: 'chat', channel: currentChannel, content: content }));
   input.value = '';
 }
 
 // --- Channels ---
 function switchChannel(channel) {
   currentChannel = channel;
-
-  // Update tabs
   document.querySelectorAll('.chat-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.channel === channel);
     if (t.dataset.channel === channel) t.style.color = '';
   });
 
-  // Clear and reload messages
   const container = document.getElementById('chat-messages');
   container.innerHTML = '';
   streamingMessages = {};
 
-  // Load cached messages
   if (channels[channel]) {
     channels[channel].forEach(m => {
       const el = createMessageEl(m);
@@ -511,9 +615,8 @@ function switchChannel(channel) {
 }
 
 function addChannelTab(channel, label) {
-  if (document.querySelector(`.chat-tab[data-channel="${channel}"]`)) return;
+  if (document.querySelector('.chat-tab[data-channel="' + channel + '"]')) return;
   channels[channel] = [];
-
   const tab = document.createElement('div');
   tab.className = 'chat-tab';
   tab.dataset.channel = channel;
@@ -523,20 +626,21 @@ function addChannelTab(channel, label) {
 }
 
 function openDM(agentId, agentName, agentEmoji) {
-  const channel = `dm:user:${agentId}`;
-  addChannelTab(channel, `${agentEmoji} ${agentName}`);
+  const channel = 'dm:user:' + agentId;
+  addChannelTab(channel, agentEmoji + ' ' + agentName);
   switchChannel(channel);
 }
 
 // --- Meeting ---
 function openMeetingModal() {
+  if (agents.length === 0) { alert('Add agents first!'); return; }
   const container = document.getElementById('meeting-agents');
   container.innerHTML = '';
   agents.forEach(a => {
     const el = document.createElement('div');
     el.className = 'agent-cb selected';
     el.dataset.id = a.id;
-    el.textContent = `${a.emoji} ${a.name}`;
+    el.textContent = a.emoji + ' ' + a.name;
     el.onclick = () => el.classList.toggle('selected');
     container.appendChild(el);
   });
@@ -546,14 +650,8 @@ function openMeetingModal() {
 function startMeeting() {
   const topic = document.getElementById('meeting-topic').value.trim() || 'General Discussion';
   const selected = [...document.querySelectorAll('#meeting-agents .agent-cb.selected')].map(e => e.dataset.id);
-
   if (selected.length === 0) return;
-
-  ws.send(JSON.stringify({
-    type: 'meeting_start',
-    topic: topic,
-    agents: selected,
-  }));
+  ws.send(JSON.stringify({ type: 'meeting_start', topic: topic, agents: selected }));
   closeModal('meeting-modal');
 }
 
@@ -564,13 +662,14 @@ function endMeeting() {
 
 // --- Collaboration ---
 function openCollabModal() {
+  if (agents.length === 0) { alert('Add agents first!'); return; }
   const container = document.getElementById('collab-agents');
   container.innerHTML = '';
   agents.forEach(a => {
     const el = document.createElement('div');
     el.className = 'agent-cb selected';
     el.dataset.id = a.id;
-    el.textContent = `${a.emoji} ${a.name}`;
+    el.textContent = a.emoji + ' ' + a.name;
     el.onclick = () => el.classList.toggle('selected');
     container.appendChild(el);
   });
@@ -581,15 +680,8 @@ function startCollab() {
   const task = document.getElementById('collab-task').value.trim();
   const selected = [...document.querySelectorAll('#collab-agents .agent-cb.selected')].map(e => e.dataset.id);
   const rounds = parseInt(document.getElementById('collab-rounds').value);
-
   if (!task || selected.length === 0) return;
-
-  ws.send(JSON.stringify({
-    type: 'collab_start',
-    task: task,
-    agents: selected,
-    rounds: rounds,
-  }));
+  ws.send(JSON.stringify({ type: 'collab_start', task: task, agents: selected, rounds: rounds }));
   closeModal('collab-modal');
 }
 
@@ -625,12 +717,8 @@ function doLogin() {
 document.getElementById('login-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
-
 document.getElementById('chat-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
 // Click outside modal to close
